@@ -46,3 +46,23 @@ Use `Authorization: Bearer <accessToken>` nas rotas protegidas. Para confirmar p
 - O pagamento é simulado: não há integração real com gateway.
 - A listagem de produtos filtra em memória nesta primeira versão. Para produção, implemente filtros/paginação no banco.
 - Esta é uma conversão funcional de referência, **não validada por testes de integração**. Antes de produção, adicionar migrations, testes de concorrência/estoque, observabilidade e regras de multi-tenancy.
+
+---
+
+## Documentação Técnica Oficial (Spec-Driven Development)
+
+Para análise aprofundada da arquitetura, objetivos de negócio, contratos de API e documentação técnica por camada:
+
+1. **Visão Global**:
+   - [Arquitetura do Sistema](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/docs/arquitetura-do-sistema.md)
+   - [Objetivo do Sistema](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/docs/objetivo-do-sistema.md)
+
+2. **Documentação por Camada / Módulo**:
+   - [Config & Segurança (br.com.ecommerce.config)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/java/br/com/ecommerce/config/README.md)
+   - [Controllers REST (br.com.ecommerce.controller)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/java/br/com/ecommerce/controller/README.md)
+   - [Lógica de Negócios & Serviços (br.com.ecommerce.service)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/java/br/com/ecommerce/service/README.md)
+   - [Repositórios & Persistência (br.com.ecommerce.repository)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/java/br/com/ecommerce/repository/README.md)
+   - [Modelos & Entidades JPA (br.com.ecommerce.model)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/java/br/com/ecommerce/model/README.md)
+   - [Configurações de Recursos (src/main/resources)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/main/resources/README.md)
+   - [Módulo de Testes (src/test/java/br/com/ecommerce)](file:///c:/Users/use/Documents/Projetos%20Java/ecommerce-springboot-sem-docker/ecommerce-springboot/src/test/java/br/com/ecommerce/README.md)
+
