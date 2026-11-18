@@ -2,9 +2,9 @@
 
 ## 1. Propósito Principal do Sistema
 
-O **ecommerce-springboot** tem como propósito central fornecer uma **API RESTful de comércio eletrônico**, atuando como o motor transacional de backend para operações de cadastro e consulta de catálogo, autenticação segura de usuários, gerenciamento de carrinhos de compras em sessão, fechamento de pedidos com baixa de estoque e liquidação/cancelamento de pagamentos simulados.
+O **ecommerce-springboot** tem como propósito central fornecer uma **API RESTful de comércio eletrônico**, atuando como o motor transacional de backend para operações de cadastro e consulta de catálogo, autenticação segura de usuários, gerenciamento de carrinhos de compras em sessão, fechamento de pedidos com composição de endereço de entrega, controle de ciclo de vida de pedidos físicos com baixa/estorno de estoque condicional e liquidação de pagamentos acionada pelo front-end.
 
-O sistema atua como o núcleo operacional e de regras de negócio, projetado para desacoplar a interface com o usuário (aplicações web, mobile ou pontos de venda) da persistência de dados e regras de domínio comercial.
+O sistema opera no modelo **Single-Tenant (loja única)**, centralizando todos os produtos, clientes e pedidos em uma única estrutura de domínio, sem segregação de inquilinos.
 
 ---
 
@@ -13,157 +13,159 @@ O sistema atua como o núcleo operacional e de regras de negócio, projetado par
 | Problema Identificado no Mercado / Domínio | Como o Sistema Soluciona |
 |---|---|
 | **Fragmentação de Identidades e Acesso** | Centraliza o registro e login de usuários, emitindo tokens criptográficos stateless (JWT HS256) com controle de acesso baseado em papéis (RBAC - `USER` e `ADMIN`). |
-| **Desatualização e Exibição de Produtos Indisponíveis** | Gerencia catálogo hierárquico com status ativo/inativo e valida a existência e estoque antes de permitir inclusão em carrinho ou faturamento. |
-| **Abandono e Gestão de Intenção de Compra** | Disponibiliza endpoints dedicados de carrinho para adição, listagem e remoção de itens, calculando somatórios automaticamente. |
+| **Exclusão Indevida de Contas e Perda de Histórico** | Restringe a exclusão de contas exclusivamente ao `ADMIN`, permitindo ao usuário logado alterar sua própria senha com segurança. |
+| **Rigidez na Categorização de Produtos** | Permite que categorias possuam profundidade hierárquica livre/infinita e que um produto pertença a múltiplas categorias simultaneamente (`@ManyToMany`). |
+| **Exibição de Produtos Indisponíveis no Catálogo** | Produtos desativados (`INACTIVE`) saem imediatamente das listagens públicas de catálogo no momento da consulta. |
+| **Inconsistência de Endereço no Despacho Físico** | Compõe o endereço de entrega (`DeliveryAddress`) diretamente no pedido no momento do checkout, congelando as informações de entrega. |
 | **Risco de Venda sem Estoque Físico** | No momento do checkout (`OrderService.checkout`), revalida o estoque e realiza o decremento imediato dentro de uma transação atômica (`@Transactional`). |
-| **Falta de Rastreabilidade Financeira do Pedido** | Cria um registro de pagamento acoplado ao pedido, permitindo acompanhar o ciclo de vida (`AWAITING_CONFIRMATION` $\rightarrow$ `PAID` ou `CANCELED`). |
-| **Perda de Itens em Caso de Desistência/Cancelamento** | Caso um pagamento seja cancelado antes de pago, os itens associados ao pedido têm suas quantidades estornadas automaticamente ao estoque do produto. |
+| **Quebra de Integridade por Cancelamentos Parciais** | Proíbe terminantemente cancelamentos parciais de itens: o cancelamento de pedido é sempre atômico (pedido total). |
+| **Vazamento e Inconsistência de Estoque no Pós-Venda** | Regula o estorno de estoque por status: o estoque só é estornado se o pedido estiver em `PENDING`, `PAID` ou `PACKING`. Uma vez marcado como `SHIPPED` ou `DELIVERED`, o cancelamento com estorno direto de estoque é terminantemente bloqueado. |
 
 ---
 
 ## 3. Principais Fluxos de Negócio
 
-### 3.1. Fluxo de Onboarding e Autenticação
+### 3.1. Fluxo de Onboarding, Autenticação e Gestão de Perfil
 1. O usuário anônimo submete nome, e-mail e senha (`POST /api/v1/auth/register`).
-2. O sistema verifica a unicidade do e-mail no banco H2.
-3. A senha é criptografada com algoritmo BCrypt e o usuário é persistido com o papel `USER`.
-4. O sistema retorna o usuário criado acompanhado de tokens JWT (`accessToken` de 15 minutos e `refreshToken` de 7 dias).
-5. O usuário utiliza o token `Bearer` no cabeçalho `Authorization` para as requisições subsequentes.
+2. O sistema valida a unicidade do e-mail no banco H2, criptografa a senha com BCrypt e persiste o usuário com papel `USER`.
+3. O sistema emite par de tokens JWT (`accessToken` de 15 minutos e `refreshToken` de 7 dias).
+4. O usuário logado pode alterar sua própria senha (`PUT /api/v1/users/{id}/password`).
+5. Apenas o administrador (`ADMIN`) tem permissão de excluir usuários (`DELETE /api/v1/users/{id}`). O próprio usuário não pode deletar sua conta.
 
-### 3.2. Fluxo de Navegação e Catálogo
-1. Qualquer visitante (autenticado ou público) pode listar categorias (`GET /api/v1/categories`) e produtos (`GET /api/v1/products`).
-2. A listagem de produtos suporta paginação (`page`, `limit`), busca por substring no nome (`search`) e filtragem por categoria (`categoryId`).
-3. Administradores autenticados com claim `role: "ADMIN"` podem criar, atualizar e excluir categorias e produtos.
+### 3.2. Fluxo de Catálogo e Múltiplas Categorias
+1. Visitantes e clientes consultam a hierarquia de categorias (`GET /api/v1/categories`), que suporta profundidade ilimitada de subcategorias.
+2. Visitantes consultam o catálogo de produtos (`GET /api/v1/products`).
+3. Produtos desativados (`ProductStatus.INACTIVE`) são filtrados imediatamente na fonte de dados e não aparecem na listagem pública.
+4. Um produto pode estar associado a múltiplas categorias. A busca permite filtrar produtos por categoria mantendo suporte a paginação e busca textual.
+5. Administradores (`ADMIN`) realizam o CRUD completo de categorias e produtos.
 
 ### 3.3. Fluxo de Montagem do Carrinho
-1. O cliente autenticado adiciona um item ao carrinho (`POST /api/v1/cart/items`), informando `productId` e `quantity`.
-2. O sistema valida se o produto existe, se está com status `ACTIVE` e se o estoque disponível atende à quantidade total requisitada.
-3. O item é persistido no armazenamento de carrinho em memória indexado por `cart:default:{userId}`.
-4. O cliente pode consultar o carrinho (`GET /api/v1/cart`) ou remover produtos específicos (`DELETE /api/v1/cart/items/{itemId}`).
+1. O cliente autenticado adiciona itens ao carrinho (`POST /api/v1/cart/items`), informando `productId` e `quantity`.
+2. O sistema valida se o produto existe, se está `ACTIVE` e se há estoque suficiente.
+3. O item é persistido no armazenamento de carrinho vinculado ao usuário autenticado.
+4. O cliente pode consultar o carrinho (`GET /api/v1/cart`) ou remover itens específicos (`DELETE /api/v1/cart/items/{itemId}`).
 
-### 3.4. Fluxo de Checkout e Fechamento de Pedido
-1. O cliente requisita o fechamento da compra (`POST /api/v1/orders`).
-2. O sistema recupera os itens do carrinho do usuário. Se estiver vazio, rejeita com erro `400 Bad Request`.
-3. Para cada item, o sistema revalida status do produto e saldo de estoque no banco.
-4. O estoque do produto é debitado (`stock = stock - quantity`).
-5. Um registro de `PurchaseOrder` com status `PENDING` e seus respectivos `OrderItem` são persistidos de forma transacional.
-6. O carrinho do usuário é esvaziado. O pedido criado é retornado ao cliente.
+### 3.4. Fluxo de Checkout com Endereço de Entrega
+1. O cliente requisita o fechamento da compra (`POST /api/v1/orders`), enviando os dados de entrega (`DeliveryAddress`: CEP, logradouro, número, complemento, bairro, cidade, UF).
+2. O sistema valida se o carrinho contém itens.
+3. Para cada item, revalida status do produto e estoque disponível no banco.
+4. O estoque de cada produto é debitado imediatamente.
+5. O pedido é criado com status `PENDING`, contendo os itens com snapshot de preço e a entidade embutida de endereço de entrega.
+6. O carrinho do usuário é esvaziado.
 
-### 3.5. Fluxo de Liquidação e Cancelamento de Pagamento
-1. O cliente cria uma intenção de pagamento para seu pedido (`POST /api/v1/payments`, enviando `orderId`).
-2. O sistema valida se o pedido pertence ao usuário autenticado e cria o registro de `Payment` com status `AWAITING_CONFIRMATION`.
-3. **Confirmação**: Ao receber `POST /api/v1/payments/{id}/confirm` com o cabeçalho `Idempotency-Key`, o sistema transiciona o status do pagamento para `PAID` e o status do pedido para `OrderStatus.PAID`.
-4. **Cancelamento**: Ao receber `POST /api/v1/payments/{id}/cancel`, se o pagamento ainda não estiver pago, o sistema altera o status do pagamento para `CANCELED`, o status do pedido para `OrderStatus.CANCELED` e restaura as quantidades de cada item ao estoque de cada produto.
+### 3.5. Fluxo de Pagamento Acionado pelo Front-end
+1. O cliente cria a intenção de pagamento para o pedido (`POST /api/v1/payments`, informando `orderId`).
+2. O registro de `Payment` é criado com status `AWAITING_CONFIRMATION`.
+3. O front-end conclui a interação financeira e aciona a rota de confirmação de pagamento (`POST /api/v1/payments/{id}/confirm` com cabeçalho `Idempotency-Key`).
+4. O sistema valida a requisição, atualiza o status do pagamento para `PAID` e transiciona o pedido de `PENDING` para `PAID`.
+
+### 3.6. Fluxo de Cumprimento de Pedido (Fulfillment e Logística)
+1. **Em Separação (`PACKING`)**: O administrador altera o status do pedido de `PAID` para `PACKING` (`PATCH /api/v1/orders/{id}/status`) para início da separação física dos produtos no estoque.
+2. **Enviado (`SHIPPED`)**: Após empacotado e despachado para a transportadora, o administrador altera o status para `SHIPPED`, registrando opcionalmente o código de rastreamento.
+3. **Entregue (`DELIVERED`)**:
+   - O próprio cliente (`USER`) pode acessar seu pedido e marcar como recebido (`PATCH /api/v1/orders/{id}/delivered`).
+   - O administrador (`ADMIN`) também possui permissão para marcar o pedido como entregue via rota administrativa de status.
+
+### 3.7. Fluxo de Cancelamento e Regras de Estorno de Estoque
+1. **Atomicidade Estrita**: O cancelamento opera exclusivamente sobre o pedido completo. É proibido o cancelamento parcial de itens.
+2. **Condição de Estorno**:
+   - Se o pedido estiver em `PENDING`, `PAID` ou `PACKING`, a requisição de cancelamento (`POST /api/v1/orders/{id}/cancel` ou cancelamento de pagamento) altera o status para `CANCELED` e **restaura integralmente as quantidades de todos os itens ao estoque dos produtos**.
+   - Se o pedido já tiver sido marcado como `SHIPPED` ou `DELIVERED`, o cancelamento com estorno direto de estoque é **terminantemente bloqueado**, pois os produtos já estão em trânsito com a transportadora ou na posse do cliente.
 
 ---
 
-## 4. Atores Envolvidos
+## 4. Atores Envolvidos e Matriz de Acesso
 
 ```mermaid
 flowchart LR
     Visitor["Visitante Anônimo"]
-    Customer["Cliente Autenticado (Role: USER)"]
-    Admin["Administrador (Role: ADMIN)"]
-    GatewaySim["Gateway Simulado / Webhook [Hipótese]"]
+    Customer["Cliente Autenticado (USER)"]
+    Admin["Administrador (ADMIN)"]
+    Frontend["Aplicação Front-end"]
 
-    Visitor -->|Navega Catálogo / Registra / Faz Login| System["E-commerce Spring Boot API"]
-    Customer -->|Gerencia Carrinho / Faz Checkout / Paga| System
-    Admin -->|Cadastra Produtos e Categorias / Gerencia Usuários| System
-    GatewaySim -.->|Confirmação Assíncrona de Pagamento| System
+    Visitor -->|Navega Catálogo / Registra / Login| System["E-commerce Spring Boot API"]
+    Customer -->|Carrinho / Checkout / Marca Recebido / Altera Senha| System
+    Frontend -->|Chama Confirmação de Pagamento| System
+    Admin -->|CRUD Catálogo / Separação / Envio / Gestão Usuários| System
 ```
 
-1. **Visitante Anônimo**:
-   - Não possui autenticação ativa.
-   - Permissões: Consultar categorias e produtos; registrar nova conta (`/register`); realizar login (`/login`); acessar endpoints de saúde (`/actuator/health`).
-2. **Cliente Autenticado (Role: `USER`)**:
-   - Usuário comum que possui credencial válida e token JWT.
-   - Permissões: Visualizar e manipular seu próprio carrinho de compras; fechar pedidos a partir do carrinho; criar pagamentos; confirmar e cancelar pagamentos de seus próprios pedidos; consultar e atualizar seus próprios dados cadastrais.
-3. **Administrador (Role: `ADMIN`)**:
-   - Usuário com privilégios de gestão operacional.
-   - Permissões: Todas as permissões do Cliente; criar, editar e excluir categorias de produtos; criar, editar e excluir produtos do catálogo; consultar, atualizar ou excluir a conta de qualquer usuário cadastrado no sistema.
-4. **Gateway Externo de Pagamento [Hipótese / Contexto Futuro]**:
-   - No estado atual do código, a confirmação de pagamento é disparada diretamente via HTTP pelo próprio cliente da API. [Hipótese] Em uma evolução comercial, este ator representará provedores como Stripe, Mercado Pago ou Pagar.me disparando webhooks de confirmação.
+### 1. Visitante Anônimo
+- Permissões: Consultar catálogo de produtos ativos e árvore de categorias; registrar nova conta (`/register`); realizar login (`/login`); verificar saúde da API (`/actuator/health`).
+
+### 2. Cliente Autenticado (`ROLE_USER`)
+- Permissões:
+  - Gerenciar seu próprio carrinho de compras.
+  - Fechar pedido informando endereço de entrega.
+  - Listar todos os seus próprios pedidos (`GET /api/v1/orders`, listagem direta sem filtros).
+  - Confirmar recebimento do seu pedido, transicionando para `DELIVERED`.
+  - Cancelar seu próprio pedido enquanto o status for `PENDING`, `PAID` ou `PACKING` (com estorno de estoque).
+  - Alterar sua própria senha de acesso.
+- **Restrições**: Não pode alterar status de envio (`PACKING`, `SHIPPED`); não pode excluir sua própria conta; não pode cancelar pedidos já enviados; não pode fazer cancelamento parcial de itens.
+
+### 3. Administrador (`ROLE_ADMIN`)
+- Permissões:
+  - Gerenciamento total de categorias (árvore ilimitada) e produtos (múltiplas categorias).
+  - Excluir contas de qualquer usuário cadastrado (função exclusiva de admin).
+  - Atualizar status logístico de pedidos (`PACKING`, `SHIPPED`, `DELIVERED`).
+  - Cancelar pedidos em conformidade com as regras de status.
+- **Definição de Escopo**: O admin não possui rota para filtrar ou listar pedidos por um usuário específico; sua visão é operacional sobre os pedidos globais da loja.
+
+### 4. Aplicação Front-end
+- Atua como a interface orquestradora: coleta dados de pagamento e invoca ativamente o endpoint de confirmação de pagamento (`POST /api/v1/payments/{id}/confirm`) após o processamento financeiro.
 
 ---
 
-## 5. Funcionalidades Centrais
+## 5. Matriz de Estados do Pedido (`OrderStatus`)
+
+| Status | Descrição | Quem altera para este status? | Permite Cancelamento com Estorno de Estoque? |
+|---|---|---|:---:|
+| `PENDING` | Pedido gerado no checkout, aguardando liquidação | Sistema | ✅ Sim |
+| `PAID` | Pagamento aprovado via chamada do front-end | Front-end / Sistema | ✅ Sim |
+| `PACKING` | Pedido em processo de separação física e empacotamento | `ADMIN` | ✅ Sim |
+| `SHIPPED` | Pedido despachado para entrega com transportadora | `ADMIN` | ❌ **Bloqueado** |
+| `DELIVERED` | Pedido entregue ao destinatário final | `USER` (marcar recebido) ou `ADMIN` | ❌ **Bloqueado** |
+| `CANCELED` | Pedido cancelado integralmente | `USER` ou `ADMIN` (se elegível) | — |
+
+---
+
+## 6. Funcionalidades Centrais e Endpoints
 
 | Domínio | Endpoint | Método | Nível de Acesso | Descrição Operacional |
 |---|---|---|---|---|
-| **Autenticação** | `/api/v1/auth/register` | `POST` | Público | Registra novo usuário, criptografa senha com BCrypt e emite tokens. |
-| **Autenticação** | `/api/v1/auth/login` | `POST` | Público | Autentica credenciais (e-mail/senha) e emite par de tokens JWT. |
-| **Catálogo** | `/api/v1/categories` | `GET` | Público | Retorna a listagem completa de categorias. |
-| **Catálogo** | `/api/v1/categories/{id}` | `GET` | Público | Retorna os detalhes de uma categoria específica por ID. |
-| **Catálogo** | `/api/v1/categories` | `POST` | ADMIN | Cria uma nova categoria (suporta categoria pai opcional). |
-| **Catálogo** | `/api/v1/categories/{id}` | `PUT` | ADMIN | Atualiza dados cadastrais de uma categoria existente. |
-| **Catálogo** | `/api/v1/categories/{id}` | `DELETE` | ADMIN | Remove uma categoria existente do banco de dados. |
-| **Catálogo** | `/api/v1/products` | `GET` | Público | Lista produtos com suporte a busca textual, categoria e paginação. |
-| **Catálogo** | `/api/v1/products/{id}` | `GET` | Público | Retorna detalhes de um produto por ID. |
-| **Catálogo** | `/api/v1/products` | `POST` | ADMIN | Cadastra novo produto no catálogo (valida unicidade de SKU). |
-| **Catálogo** | `/api/v1/products/{id}` | `PUT` | ADMIN | Atualiza atributos de um produto existente. |
-| **Catálogo** | `/api/v1/products/{id}` | `DELETE` | ADMIN | Remove um produto do catálogo. |
-| **Carrinho** | `/api/v1/cart` | `GET` | Autenticado | Retorna o carrinho do usuário logado e o somatório dos itens. |
-| **Carrinho** | `/api/v1/cart/items` | `POST` | Autenticado | Adiciona produto ao carrinho validando status e estoque disponível. |
-| **Carrinho** | `/api/v1/cart/items/{itemId}` | `DELETE` | Autenticado | Remove um item específico do carrinho do usuário autenticado. |
-| **Pedidos** | `/api/v1/orders` | `GET` | Autenticado | Lista todos os pedidos pertencentes ao usuário logado. |
-| **Pedidos** | `/api/v1/orders` | `POST` | Autenticado | Converte os itens do carrinho em pedido (`PENDING`), dando baixa no estoque. |
-| **Pagamentos** | `/api/v1/payments` | `POST` | Autenticado | Cria intenção de pagamento associada a um pedido com status pendente. |
-| **Pagamentos** | `/api/v1/payments/{id}/confirm` | `POST` | Autenticado | Confirma o pagamento (exige `Idempotency-Key`) e marca pedido como `PAID`. |
-| **Pagamentos** | `/api/v1/payments/{id}/cancel` | `POST` | Autenticado | Cancela o pagamento e pedido, estornando itens de volta ao estoque. |
-| **Usuários** | `/api/v1/users/{id}` | `GET` | Próprio / ADMIN | Retorna dados cadastrais do usuário (requer correspondência de ID ou ADMIN). |
-| **Usuários** | `/api/v1/users/{id}` | `PUT` | Próprio / ADMIN | Atualiza nome, e-mail ou senha do usuário informado. |
-| **Usuários** | `/api/v1/users/{id}` | `DELETE` | Próprio / ADMIN | Exclui o cadastro do usuário. |
+| **Autenticação** | `/api/v1/auth/register` | `POST` | Público | Registra novo usuário com papel `USER`. |
+| **Autenticação** | `/api/v1/auth/login` | `POST` | Público | Autentica credenciais e emite tokens JWT. |
+| **Usuários** | `/api/v1/users/{id}/password` | `PUT` | Próprio / Logado | Permite ao usuário logado alterar sua própria senha. |
+| **Usuários** | `/api/v1/users/{id}` | `GET` | Próprio / ADMIN | Consulta dados cadastrais do usuário. |
+| **Usuários** | `/api/v1/users/{id}` | `PUT` | Próprio / ADMIN | Atualiza dados cadastrais (nome, e-mail). |
+| **Usuários** | `/api/v1/users/{id}` | `DELETE` | **Exclusivo ADMIN** | Exclui a conta do usuário especificado. |
+| **Catálogo** | `/api/v1/categories` | `GET` | Público | Retorna árvore de categorias com profundidade ilimitada. |
+| **Catálogo** | `/api/v1/categories` | `POST` | ADMIN | Cadastra categoria (suporta categoria pai para hierarquia). |
+| **Catálogo** | `/api/v1/categories/{id}` | `PUT` / `DELETE` | ADMIN | Atualiza ou remove categoria. |
+| **Catálogo** | `/api/v1/products` | `GET` | Público | Lista produtos ativos (`ACTIVE`). Produtos inativos são excluídos da resposta. |
+| **Catálogo** | `/api/v1/products/{id}` | `GET` | Público | Retorna detalhes do produto e suas categorias associadas. |
+| **Catálogo** | `/api/v1/products` | `POST` | ADMIN | Cadastra produto associando a uma ou mais categorias (`categoryIds`). |
+| **Catálogo** | `/api/v1/products/{id}` | `PUT` / `DELETE` | ADMIN | Atualiza atributos/categorias ou remove produto do catálogo. |
+| **Carrinho** | `/api/v1/cart` | `GET` | Autenticado | Retorna carrinho e somatório de itens do usuário autenticado. |
+| **Carrinho** | `/api/v1/cart/items` | `POST` | Autenticado | Adiciona produto ao carrinho validando status ativo e estoque. |
+| **Carrinho** | `/api/v1/cart/items/{itemId}` | `DELETE` | Autenticado | Remove item do carrinho. |
+| **Pedidos** | `/api/v1/orders` | `GET` | Autenticado | Lista todos os pedidos pertencentes ao usuário logado (sem filtro). |
+| **Pedidos** | `/api/v1/orders` | `POST` | Autenticado | Cria pedido com `DeliveryAddress`, debita estoque e limpa carrinho. |
+| **Pedidos** | `/api/v1/orders/{id}/status` | `PATCH` | **ADMIN** | Atualiza status operacional para `PACKING` ou `SHIPPED`. |
+| **Pedidos** | `/api/v1/orders/{id}/delivered` | `PATCH` | Próprio / ADMIN | Marca o pedido como recebido (`DELIVERED`). |
+| **Pedidos** | `/api/v1/orders/{id}/cancel` | `POST` | Próprio / ADMIN | Cancela o pedido (estorna estoque se `PENDING`, `PAID` ou `PACKING`). |
+| **Pagamentos** | `/api/v1/payments` | `POST` | Autenticado | Cria intenção de pagamento vinculada ao pedido. |
+| **Pagamentos** | `/api/v1/payments/{id}/confirm` | `POST` | Autenticado (Front) | Confirma pagamento com `Idempotency-Key` e marca pedido como `PAID`. |
+| **Pagamentos** | `/api/v1/payments/{id}/cancel` | `POST` | Autenticado | Cancela intenção de pagamento, respeitando as regras de estorno. |
 
 ---
 
-## 6. Visão de Produto
+## 7. Visão de Produto e Modelo Operacional
 
-### 6.1. Posicionamento
-O sistema se posiciona como uma **plataforma headless de comércio eletrônico**, fornecendo uma camada de serviços estável e padronizada que serve como alicerce transacional para múltiplos canais de venda (lojas virtuais em Next.js/React, aplicativos móveis Android/iOS ou integrações de marketplace).
+### 7.1. Posicionamento
+O sistema é uma **API RESTful de comércio eletrônico para loja única (Single-Tenant)**, focada no fluxo completo de venda de produtos físicos: seleção em catálogo multicategoria, carrinho, checkout com endereço de entrega, pagamento acionado pelo front-end e acompanhamento de separação e despacho logístico.
 
-### 6.2. Estado Atual do Produto
-- **Estágio de Maturidade**: Protótipo funcional migrado de referência (Proof of Concept / Baseline operacional).
-- **Ambiente Vigente**: Configuração simplificada "sem docker", projetada para desenvolvimento rápido local sem requisitos de conteinerização.
-- **Limitações do Estado Atual**:
-  - Simulação de pagamentos (não há conexão com gateway financeiro real).
-  - Carrinhos efêmeros na memória da aplicação.
-  - Paginação e filtros de catálogo processados em memória após carregar todos os registros.
-  - Ausência de suíte de testes automatizados com cobertura de cenários de integração.
-
-### 6.3. Roadmap Estratégico de Evolução [Hipótese de Produto]
-1. **Fase 1 (Robustez e Resiliência)**: Substituição do H2 por banco relacional enterprise (PostgreSQL), adoção de Redis distribuído para sessão/carrinho e migração de banco via Flyway.
-2. **Fase 2 (Integração e Pagamentos Reais)**: Integração com provedor real de pagamento (ex: Pix / Cartão via Webhooks), persistência real de logs de idempotência e sistema de notificação assíncrona por e-mail.
-3. **Fase 3 (Multi-tenancy Real)**: Ativação e isolamento efetivo do atributo `tenantId` já existente no modelo para viabilizar múltiplos lojistas na mesma infraestrutura.
-
----
-
-## 7. Contexto Operacional do Sistema
-
-```mermaid
-flowchart TD
-    subgraph HostEnvironment ["Ambiente Operacional do Host (Windows / Linux)"]
-        JVM["Java Virtual Machine (JDK 21 LTS)"]
-        FileSystem[("Sistema de Arquivos Local")]
-    end
-
-    subgraph RunningProcess ["Processo Spring Boot (Porta :8080)"]
-        App["EcommerceApplication"]
-        H2Engine["Motor H2 Embarcado"]
-        RAMCache["ConcurrentHashMap (Carrinho)"]
-    end
-
-    JVM --> RunningProcess
-    H2Engine -->|Persiste dados relacionais| FileSystem
-    FileSystem -.->|Arquivo local| DBFile["./data/ecommerce.mv.db"]
-```
-
-### Configurações de Execução e Variáveis
-- **Porta do Servidor**: Padrão `8080`, configurável via variável de ambiente `PORT`.
-- **String de Conexão JDBC**: `jdbc:h2:file:./data/ecommerce;DB_CLOSE_ON_EXIT=FALSE` (armazena arquivos locais `./data/ecommerce.mv.db` e `./data/ecommerce.trace.db`).
-- **Credenciais do Banco Local**: Usuário `sa`, senha vazia `""`.
-- **Chave Secreta de Assinatura JWT**: Configurada em `app.jwt-secret`, sobrescrevível via variável de ambiente `JWT_SECRET`. Valor padrão: `change-this-development-only-secret-32-characters-minimum`.
-- **Console Administrativo do Banco**: Habilitado em `http://localhost:8080/h2-console`.
-
-### Restrições Operacionais Críticas
-- **Persistência de Carrinhos**: Reiniciar o processo da aplicação apaga instantaneamente todos os carrinhos de compras ativos.
-- **Concorrência Mono-instância**: Devido ao lock de arquivo exclusivo do H2 (`ecommerce.mv.db`) e ao estado de carrinho em memória, o sistema não pode ser executado em mais de uma instância simultânea apontando para a mesma pasta.
+### 7.2. Decisões Estratégicas Consolidadas
+- **Arquitetura Single-Tenant**: Todas as menções e campos legados de `tenantId` foram formalmente descartados para manter o código limpo, coeso e sem complexidade acidental.
+- **Cancelamento Integral e Seguro**: Não há suporte para cancelamento parcial de itens. O estorno de estoque só ocorre enquanto os produtos estiverem sob controle interno da loja (`PENDING`, `PAID`, `PACKING`).
+- **Segurança e Retenção de Contas**: Usuários comuns não possuem poder de auto-exclusão de conta, preservando a integridade histórica de pedidos e auditoria.
+- **Relacionamento Flexível no Catálogo**: Categorias em árvore de profundidade infinita e produtos vinculados a múltiplas categorias via tabela associativa.

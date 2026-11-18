@@ -1,75 +1,68 @@
 # Módulo: test (`src/test/java/br/com/ecommerce`)
 
 ## 1. Objetivo do Módulo
-Fornecer a infraestrutura de garantia de qualidade, verificação de regressões e testes automatizados (unitários e de integração) para todos os componentes do sistema e-commerce.
+Fornecer a infraestrutura de garantia de qualidade, verificação de regressões e testes automatizados (unitários e de integração) para todos os componentes do sistema e-commerce, orientados para desenvolvimento baseado em especificações (Spec-Driven Development).
 
 ---
 
 ## 2. Responsabilidade Principal
-- Executar validações automatizadas de lógica de negócio e regras de domínio.
-- Garantir a conformidade dos contratos de API REST (códigos HTTP, serialização de respostas, validações de payload).
-- Testar a integridade transacional de operações críticas (checkout, concorrência de estoque e idempotência de pagamento).
-- Validar as regras de segurança e autorização de endpoints (Spring Security / JWT).
+- Validar as regras de negócio de pedidos, baixa e estorno condicional de estoque.
+- Garantir a conformidade dos contratos REST e códigos HTTP (`200`, `201`, `204`, `400`, `401`, `403`, `409`).
+- Testar as travas de autorização e segurança RBAC (`USER` vs `ADMIN`).
+- Validar a integridade das composições de agregação (`PurchaseOrder` compondo `DeliveryAddress` e `OrderItem`).
 
 ---
 
-## 3. Funcionalidades Existentes
-No estado atual da base de código, o módulo possui apenas um teste de fumaça simbólico:
+## 3. Matriz de Cenários Prioritários para Implementação
 
-### `EcommerceApplicationTests.java`
-```java
-package br.com.ecommerce;
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+Com base nas definições consolidadas na entrevista de alinhamento, a suíte de testes deve cobrir obrigatoriamente os seguintes cenários:
 
-class EcommerceApplicationTests {
-    @Test
-    void projectSkeleton() {
-        assertTrue(true);
-    }
-}
-```
-- A classe não possui `@SpringBootTest`, não sobe o contexto Spring e não executa nenhuma asserção real além de `assertTrue(true)`.
+### 3.1. Regras de Cancelamento e Estorno de Estoque
+1. **Cancelamento em Estados Permitidos (`PENDING`, `PAID`, `PACKING`)**:
+   - Dado um pedido em status elegível e itens com quantidades debitadas do produto;
+   - Ao executar o cancelamento (`OrderService.cancel`);
+   - Deve alterar o status para `CANCELED` e **restaurar integralmente as quantidades no estoque de cada produto**.
+2. **Bloqueio de Cancelamento Pós-Envio (`SHIPPED`, `DELIVERED`)**:
+   - Dado um pedido com status `SHIPPED` ou `DELIVERED`;
+   - Ao tentar cancelar o pedido;
+   - Deve lançar `ApiException(400 Bad Request)` com mensagem explicativa e **manter o estoque inalterado**.
+3. **Proibição de Cancelamento Parcial**:
+   - Garantir que a API rejeite qualquer tentativa de remover ou estornar itens individualmente de um pedido fechado.
 
----
+### 3.2. Transições e Permissões de Status do Pedido
+1. **Avanço Logístico Restrito a `ADMIN`**:
+   - Requisição de cliente comum (`ROLE_USER`) tentando atualizar para `PACKING` ou `SHIPPED` deve retornar `403 Forbidden`.
+   - Requisição de administrador (`ROLE_ADMIN`) deve atualizar o status com sucesso (`200 OK`).
+2. **Confirmação de Recebimento pelo Consumidor**:
+   - Cliente titular marcando seu próprio pedido como `DELIVERED` deve ser aceito.
+   - Cliente tentando marcar pedido de outro usuário como `DELIVERED` deve retornar `403 Forbidden`.
 
-## 4. Dependências Internas e Externas
-### Dependências Internas
-- Potencialmente todos os módulos de `src/main/java`.
+### 3.3. Governança e Segurança de Contas de Usuários
+1. **Bloqueio de Auto-Exclusão**:
+   - Cliente autenticado chamando `DELETE /api/v1/users/{id}` (mesmo para o seu próprio ID) deve receber `403 Forbidden`.
+2. **Exclusão Administrativa**:
+   - Administrador autenticado chamando `DELETE /api/v1/users/{id}` deve excluir com sucesso (`204 No Content`).
+3. **Alteração de Senha**:
+   - Usuário autenticado alterando sua própria senha fornecendo senha atual correta deve obter sucesso (`200 OK`) e validar o novo hash BCrypt.
 
-### Dependências Externas (configuradas no `pom.xml`)
-- `org.springframework.boot:spring-boot-starter-test` (escopo `test`): Inclui JUnit 5 (Jupiter), AssertJ, Hamcrest, Mockito, JSONassert e Spring Test (`MockMvc`).
-- `org.springframework.security:spring-security-test` (escopo `test`): Fornece suporte a testes de segurança, anotações `@WithMockUser`, `@WithAnonymousUser` e utilitários de autenticação JWT simulada.
+### 3.4. Catálogo e Visibilidade
+1. **Remoção Imediata de Inativos**:
+   - Produto com `status = INACTIVE` não deve constar na listagem pública `GET /api/v1/products`.
+2. **Múltiplas Categorias**:
+   - Produto associado a duas categorias deve ser retornado ao filtrar por qualquer uma delas.
 
----
-
-## 5. Módulos Relacionados
-- Todos os pacotes de produção: `config`, `controller`, `service`, `repository` e `model`.
-
----
-
-## 6. Pontos de Entrada
-- Execução da fase de testes do ciclo de vida Maven (`mvn test`).
-- Test runner do JUnit 5 integrado à IDE.
-
----
-
-## 7. Fluxos Importantes
-- **Fluxo Atual**: Execução imediata do método `projectSkeleton()`, que retorna sucesso sem avaliar nenhum componente de software.
-- **Fluxos Necessários para Spec-Driven Development [Hipótese / Requisito Futuro]**:
-  1. Testes de Unidade de Domínio e Serviços (comportamento de `OrderService.checkout`, `CartService`, `PaymentService`).
-  2. Testes de Integração de API com `MockMvc` cobrindo cenários de sucesso e erro (400, 401, 403, 404, 409).
-  3. Testes de Concorrência Simulada com Múltiplas Threads testando débito simultâneo de estoque.
+### 3.5. Checkout e Endereço de Entrega
+1. **Composição de `DeliveryAddress`**:
+   - Validar que o pedido gerado contenha todos os atributos do endereço informados na requisição de checkout.
 
 ---
 
-## 8. Arquivos Críticos
-- `EcommerceApplicationTests.java`: Único arquivo de teste presente na suíte atual.
+## 4. Dependências de Testes (configuradas no `pom.xml`)
+- `org.springframework.boot:spring-boot-starter-test`: JUnit 5, AssertJ, Mockito, Spring Test (`MockMvc`).
+- `org.springframework.security:spring-security-test`: Suporte a simulação de contextos JWT (`@WithMockUser`, `@WithMockJwt`).
 
 ---
 
-## 9. Observações Técnicas e Débitos Identificados
-- **Débito Crítico: Cobertura de Testes Nula**: O sistema não possui nenhum teste unitário ou de integração cobrindo fluxos reais. Alterações nas camadas de serviço ou repositório podem introduzir quebras de regressão silenciosas.
-- **Falta de Testes de Autenticação e Segurança**: Não há verificação automatizada garantindo que endpoints restritos (`/products` com método `POST`) realmente bloqueiem requisições sem o papel `ADMIN`.
-- **Falta de Testes Transacionais**: O fluxo de checkout (`OrderService.checkout`) envolve múltiplas operações de banco e memória sem nenhum teste garantindo que o rollback ocorra em caso de exceção intermediária.
-- **Diretriz Prioritária para SDD**: Antes de novas adições funcionais, a suíte de testes deve ser estruturada com cobertura dos fluxos centrais descritos no documento de Arquitetura.
+## 5. Observações Técnicas e Débitos Identificados
+- **Suíte Atual Esquelética**: `EcommerceApplicationTests` possui apenas um teste `assertTrue(true)` simbólico.
+- **Próximo Passo**: Criar classes dedicadas `OrderServiceTest`, `CatalogServiceTest`, `OrderControllerIntegrationTest` e `UserControllerSecurityTest` cobrindo a matriz acima descrita.
