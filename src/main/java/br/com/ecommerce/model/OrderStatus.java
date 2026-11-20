@@ -1,4 +1,11 @@
 package br.com.ecommerce.model;
 
 
-public enum OrderStatus {PENDING, PAID, CANCELED}
+public enum OrderStatus {
+    PENDING,
+    PAID,
+    PACKING,
+    SHIPPED,
+    DELIVERED,
+    CANCELED
+}

@@ -55,4 +55,12 @@ public class OrderService {
         carts.clear(userId);
         return saved;
     }
+
+    public PurchaseOrder cancel(String id, String userId, boolean isAdmin) {
+        throw new UnsupportedOperationException("Não implementado");
+    }
+
+    public PurchaseOrder cancel(String id, String userId) {
+        return cancel(id, userId, false);
+    }
 }

@@ -27,4 +27,9 @@ public class OrderController {
     public Object checkout(@AuthenticationPrincipal Jwt jwt) {
         return Map.of("data", service.checkout(jwt.getSubject()));
     }
+
+    @PostMapping("/{id}/cancel")
+    public Object cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
+        throw new UnsupportedOperationException("Não implementado");
+    }
 }
