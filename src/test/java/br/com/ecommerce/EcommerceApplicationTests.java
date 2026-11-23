@@ -1,4 +1,12 @@
 package br.com.ecommerce;
+
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-class EcommerceApplicationTests { @Test void projectSkeleton() { assertTrue(true); } }
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class EcommerceApplicationTests {
+
+    @Test
+    void contextLoads() {
+    }
+}
