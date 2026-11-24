@@ -122,6 +122,7 @@ flowchart TD
      - `GET /api/v1/orders`: Retorna todos os pedidos pertencentes ao usuário logado (sem filtro). O administrador não possui rota específica para listar pedidos de um usuário específico.
      - `PATCH /api/v1/orders/{id}/status`: Exclusiva de `ROLE_ADMIN` para transições logísticas (`PACKING`, `SHIPPED`).
      - `PATCH /api/v1/orders/{id}/delivered`: Permite ao cliente (`USER` dono do pedido) ou ao `ADMIN` marcar como recebido.
+     - `DELETE /order/{id}`: Permite ao titular (`ROLE_USER`) ou ao `ROLE_ADMIN` cancelar o pedido integralmente com estorno condicional de estoque, seguindo o padrão RESTful (o antigo endpoint `POST /{id}/cancel` foi desativado).
 
 3. **Invariantes de Catálogo e Múltiplas Categorias**:
    - `Category` suporta auto-relacionamento hierárquico com profundidade ilimitada (`parent` $\rightarrow$ `subcategories`).

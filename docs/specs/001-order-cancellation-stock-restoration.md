@@ -76,6 +76,7 @@ Como gestor financeiro e de estoque, quero garantir que cancelamentos operem exc
 - **FR-005**: O sistema DEVE autorizar o cancelamento apenas se o requisitante for o próprio titular do pedido (`ROLE_USER`) ou um administrador (`ROLE_ADMIN`).
 - **FR-006**: Caso um pagamento associado ao pedido seja cancelado (`POST /api/v1/payments/{id}/cancel`), o sistema DEVE sincronizar o cancelamento do pedido e aplicar as mesmas regras de estorno condicional de estoque.
 - **FR-007**: O sistema DEVE assegurar que operações repetidas de cancelamento sobre um pedido já cancelado não causem múltiplos incrementos de estoque (idempotência de estorno).
+- **FR-008**: O endpoint RESTful para cancelamento de pedidos DEVE ser exposto via método HTTP `DELETE /order/{id}`, desativando o endpoint anterior `/cancel`.
 
 ### Key Entities
 

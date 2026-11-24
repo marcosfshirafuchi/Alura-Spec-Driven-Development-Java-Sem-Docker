@@ -12,13 +12,13 @@ INSERT INTO categories (id, name) VALUES ('cat-01', 'Eletrônicos');
 -- Usuários (senha padrão: '123456')
 -- BCrypt hash para '123456': $2a$10$w81oXq5mCq/l7v3zI8vQ1u5U9ZJm8q0d6f4b6v7x8y9z0a1b2c3d4 ou compatível
 INSERT INTO users (id, name, email, password, role, tenant_id, created_at, updated_at)
-VALUES ('usr-titular-01', 'Cliente Titular', 'titular@teste.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+VALUES ('usr-titular-01', 'Cliente Titular', 'titular@teste.com', '$2a$10$bjodOAeFNvIs2hrAjEtE6eBTXAnDRYF69Vd7fjg5ezKdfGcvAywFi', 'USER', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 INSERT INTO users (id, name, email, password, role, tenant_id, created_at, updated_at)
-VALUES ('usr-outro-01', 'Outro Cliente', 'outro@teste.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'USER', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+VALUES ('usr-outro-01', 'Outro Cliente', 'outro@teste.com', '$2a$10$bjodOAeFNvIs2hrAjEtE6eBTXAnDRYF69Vd7fjg5ezKdfGcvAywFi', 'USER', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 INSERT INTO users (id, name, email, password, role, tenant_id, created_at, updated_at)
-VALUES ('usr-admin-01', 'Administrador', 'admin@teste.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'ADMIN', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+VALUES ('usr-admin-01', 'Administrador', 'admin@teste.com', '$2a$10$bjodOAeFNvIs2hrAjEtE6eBTXAnDRYF69Vd7fjg5ezKdfGcvAywFi', 'ADMIN', 'default', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- Produtos
 INSERT INTO products (id, name, description, sku, price, stock, status, tenant_id, category_id, created_at, updated_at)

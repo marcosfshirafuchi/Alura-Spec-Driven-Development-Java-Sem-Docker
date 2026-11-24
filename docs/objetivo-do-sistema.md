@@ -69,7 +69,7 @@ O sistema opera no modelo **Single-Tenant (loja única)**, centralizando todos o
 ### 3.7. Fluxo de Cancelamento e Regras de Estorno de Estoque
 1. **Atomicidade Estrita**: O cancelamento opera exclusivamente sobre o pedido completo. É proibido o cancelamento parcial de itens.
 2. **Condição de Estorno**:
-   - Se o pedido estiver em `PENDING`, `PAID` ou `PACKING`, a requisição de cancelamento (`POST /api/v1/orders/{id}/cancel` ou cancelamento de pagamento) altera o status para `CANCELED` e **restaura integralmente as quantidades de todos os itens ao estoque dos produtos**.
+   - Se o pedido estiver em `PENDING`, `PAID` ou `PACKING`, a requisição de cancelamento (`DELETE /order/{id}` ou cancelamento de pagamento) altera o status para `CANCELED` e **restaura integralmente as quantidades de todos os itens ao estoque dos produtos**.
    - Se o pedido já tiver sido marcado como `SHIPPED` ou `DELIVERED`, o cancelamento com estorno direto de estoque é **terminantemente bloqueado**, pois os produtos já estão em trânsito com a transportadora ou na posse do cliente.
 
 ---
@@ -152,7 +152,7 @@ flowchart LR
 | **Pedidos** | `/api/v1/orders` | `POST` | Autenticado | Cria pedido com `DeliveryAddress`, debita estoque e limpa carrinho. |
 | **Pedidos** | `/api/v1/orders/{id}/status` | `PATCH` | **ADMIN** | Atualiza status operacional para `PACKING` ou `SHIPPED`. |
 | **Pedidos** | `/api/v1/orders/{id}/delivered` | `PATCH` | Próprio / ADMIN | Marca o pedido como recebido (`DELIVERED`). |
-| **Pedidos** | `/api/v1/orders/{id}/cancel` | `POST` | Próprio / ADMIN | Cancela o pedido (estorna estoque se `PENDING`, `PAID` ou `PACKING`). |
+| **Pedidos** | `/order/{id}` | `DELETE` | Próprio / ADMIN | Cancela o pedido via RESTful DELETE (estorna estoque se `PENDING`, `PAID` ou `PACKING`). |
 | **Pagamentos** | `/api/v1/payments` | `POST` | Autenticado | Cria intenção de pagamento vinculada ao pedido. |
 | **Pagamentos** | `/api/v1/payments/{id}/confirm` | `POST` | Autenticado (Front) | Confirma pagamento com `Idempotency-Key` e marca pedido como `PAID`. |
 | **Pagamentos** | `/api/v1/payments/{id}/cancel` | `POST` | Autenticado | Cancela intenção de pagamento, respeitando as regras de estorno. |

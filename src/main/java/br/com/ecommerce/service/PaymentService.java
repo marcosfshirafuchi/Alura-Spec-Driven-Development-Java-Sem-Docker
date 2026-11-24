@@ -48,11 +48,7 @@ public class PaymentService {
         if (p.status.equals("PAID")) throw new ApiException(HttpStatus.CONFLICT, "Pagamento já confirmado");
         if (!p.status.equals("CANCELED")) {
             p.status = "CANCELED";
-            p.order.status = OrderStatus.CANCELED;
-            for (OrderItem item : p.order.items) {
-                item.product.stock += item.quantity;
-            }
-            orderRepo.save(p.order);
+            orders.cancel(p.order.id, userId, false);
             payments.save(p);
         }
         return Map.of("message", "Pagamento e pedido cancelados");

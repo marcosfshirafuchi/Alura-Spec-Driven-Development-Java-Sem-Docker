@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "c1f7a28e-8e4a-43cf-bf22-c3a50d4b971a",
-    "name": "E-Commerce - Cancelamento de Pedido e Estorno de Estoque",
-    "description": "Suíte de testes de caixa preta para validar o cancelamento de pedidos e restauração condicional de estoque conforme a especificação 001-order-cancellation-stock-restoration.",
+    "name": "E-Commerce - Cancelamento de Pedidos (DELETE /order/{id})",
+    "description": "Suíte de testes Postman para validar o novo endpoint RESTful DELETE /order/{id}, cobrindo todos os cenários obrigatórios: cancelamento com estorno, pedido inexistente, sem autenticação, sem permissão, idempotência, bloqueio pós-envio e desativação do endpoint anterior.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -49,7 +49,7 @@
           }
         },
         {
-          "name": "01.2 - Login Outro Cliente (Terceiro)",
+          "name": "01.2 - Login Outro Cliente (Sem Permissão)",
           "event": [
             {
               "listen": "test",
@@ -158,7 +158,7 @@
       ]
     },
     {
-      "name": "02 - Fluxo P1: Cancelamento PENDING com Estorno",
+      "name": "02 - Cenário 1: Cancelamento de Pedido Existente (DELETE /order/{id})",
       "item": [
         {
           "name": "02.1 - Adicionar Produto ao Carrinho",
@@ -167,7 +167,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Item adicionado ao carrinho com sucesso\", function () {",
+                  "pm.test(\"Item adicionado ao carrinho com sucesso (200)\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});"
                 ],
@@ -225,14 +225,14 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/orders",
+              "raw": "{{baseUrl}}/order",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders"]
+              "path": ["order"]
             }
           }
         },
         {
-          "name": "02.3 - Verificar Baixa Imediata no Estoque",
+          "name": "02.3 - Verificar Débito Imediato no Estoque",
           "event": [
             {
               "listen": "test",
@@ -260,206 +260,18 @@
           }
         },
         {
-          "name": "02.4 - Cancelar Pedido pelo Titular",
+          "name": "02.4 - Cancelamento do Pedido com DELETE /order/{id}",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200 OK no cancelamento\", function () {",
+                  "pm.test(\"Status code é 200 OK ao cancelar via DELETE /order/{id}\", function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "var json = pm.response.json();",
-                  "pm.test(\"Pedido transitou para status CANCELED\", function () {",
+                  "pm.test(\"Status do pedido atualizado para CANCELED\", function () {",
                   "    pm.expect(json.data.status).to.eql(\"CANCELED\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{userToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders", "{{orderId}}", "cancel"]
-            }
-          }
-        },
-        {
-          "name": "02.5 - Verificar Estoque Integralmente Recomposto",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Estoque restaurado para o saldo inicial após cancelamento\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    var initial = parseInt(pm.environment.get(\"initialStock\"));",
-                  "    pm.expect(json.data.stock).to.eql(initial);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "products", "{{productId}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "03 - Idempotência do Cancelamento",
-      "item": [
-        {
-          "name": "03.1 - Cancelar Pedido Já Cancelado",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Operação repetida é idempotente (retorna 200 com status CANCELED)\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    pm.expect(json.data.status).to.eql(\"CANCELED\");",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{userToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders", "{{orderId}}", "cancel"]
-            }
-          }
-        },
-        {
-          "name": "03.2 - Confirmar Não Duplicação de Estoque",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Estoque NÃO foi incrementado em duplicidade\", function () {",
-                  "    pm.response.to.have.status(200);",
-                  "    var json = pm.response.json();",
-                  "    var initial = parseInt(pm.environment.get(\"initialStock\"));",
-                  "    pm.expect(json.data.stock).to.eql(initial);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "products", "{{productId}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "04 - Governança RBAC e Permissões",
-      "item": [
-        {
-          "name": "04.1 - Cancelamento sem Autenticação (401)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Rejeitado com 401 Unauthorized\", function () {",
-                  "    pm.response.to.have.status(401);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders", "{{orderId}}", "cancel"]
-            }
-          }
-        },
-        {
-          "name": "04.2 - Cancelamento por Usuário Não Titular (403)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Rejeitado com 403 Forbidden\", function () {",
-                  "    pm.response.to.have.status(403);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{otherUserToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders", "{{orderId}}", "cancel"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "05 - Proibição de Cancelamento Parcial",
-      "item": [
-        {
-          "name": "05.1 - Tentar Deletar Item Isolado do Pedido",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test(\"Endpoint de remoção parcial não existe (404/405)\", function () {",
-                  "    pm.expect([404, 405]).to.include(pm.response.code);",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -475,9 +287,284 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/orders/{{orderId}}/items/fake-item-id",
+              "raw": "{{baseUrl}}/order/{{orderId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "orders", "{{orderId}}", "items", "fake-item-id"]
+              "path": ["order", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "02.5 - Verificar Recomposição Exata do Estoque",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Estoque integralmente restaurado para o saldo inicial\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    var initial = parseInt(pm.environment.get(\"initialStock\"));",
+                  "    pm.expect(json.data.stock).to.eql(initial);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "{{productId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Cenário 2: Cancelamento de Pedido Inexistente (404)",
+      "item": [
+        {
+          "name": "03.1 - Tentativa de Cancelamento de Pedido Inexistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Retorna 404 Not Found para pedido inexistente\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Mensagem explicativa de não encontrado\", function () {",
+                  "    pm.expect(json.error.message).to.eql(\"Pedido não encontrado\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/order/pedido-inexistente-uuid-9999",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "pedido-inexistente-uuid-9999"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Cenário 3: Cancelamento sem Autenticação (401)",
+      "item": [
+        {
+          "name": "04.1 - Cancelamento sem Token JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Retorna 401 Unauthorized sem cabeçalho Authorization\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "{{orderId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Cenário 4: Cancelamento com Usuário sem Permissão (403)",
+      "item": [
+        {
+          "name": "05.1 - Cancelamento por Terceiro sem Role ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Retorna 403 Forbidden para usuário não titular\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Mensagem de acesso negado\", function () {",
+                  "    pm.expect(json.error.message).to.eql(\"Acesso negado\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{otherUserToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "{{orderId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Cenário 5: Tentativa de Cancelar Pedido Já Cancelado (Idempotência)",
+      "item": [
+        {
+          "name": "06.1 - Cancelar Pedido Novamente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Retorna 200 OK com status CANCELED de forma idempotente\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.expect(json.data.status).to.eql(\"CANCELED\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/order/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "06.2 - Confirmar Não Duplicação do Estoque",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Estoque permanece inalterado sem dupla recomposição\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    var initial = parseInt(pm.environment.get(\"initialStock\"));",
+                  "    pm.expect(json.data.stock).to.eql(initial);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "products", "{{productId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Cenário 6: Pedido em Estado Que Não Permite Cancelamento (400)",
+      "item": [
+        {
+          "name": "07.1 - Cancelar Pedido com Status SHIPPED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Retorna 400 Bad Request para pedido já enviado\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.test(\"Mensagem explicativa sobre envio/entrega\", function () {",
+                  "    pm.expect(json.error.message.toLowerCase()).to.include(\"enviados\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/order/ord-shipped-01",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "ord-shipped-01"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Validação: Endpoint Anterior Desativado (404)",
+      "item": [
+        {
+          "name": "08.1 - Chamar Antigo POST /order/{id}/cancel",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Endpoint anterior /cancel não deve mais existir (404 Not Found)\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/order/{{orderId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["order", "{{orderId}}", "cancel"]
             }
           }
         }

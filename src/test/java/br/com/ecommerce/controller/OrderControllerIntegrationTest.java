@@ -33,7 +33,7 @@ class OrderControllerIntegrationTest {
     private OrderService orderService;
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - Retorna 200 quando cancelado com sucesso pelo titular")
+    @DisplayName("DELETE /order/{id} - Retorna 200 quando cancelado com sucesso pelo titular")
     void cancelOrderAsOwnerReturns200() throws Exception {
         PurchaseOrder mockOrder = new PurchaseOrder();
         mockOrder.id = "ord-100";
@@ -45,7 +45,7 @@ class OrderControllerIntegrationTest {
 
         when(orderService.cancel(eq("ord-100"), eq("user-1"), eq(false))).thenReturn(mockOrder);
 
-        mockMvc.perform(post("/api/v1/orders/ord-100/cancel")
+        mockMvc.perform(delete("/order/ord-100")
                         .with(jwt().jwt(j -> j.subject("user-1").claim("role", "USER")))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -54,7 +54,7 @@ class OrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - Retorna 200 quando cancelado por um ADMIN")
+    @DisplayName("DELETE /order/{id} - Retorna 200 quando cancelado por um ADMIN")
     void cancelOrderAsAdminReturns200() throws Exception {
         PurchaseOrder mockOrder = new PurchaseOrder();
         mockOrder.id = "ord-100";
@@ -62,7 +62,7 @@ class OrderControllerIntegrationTest {
 
         when(orderService.cancel(eq("ord-100"), eq("admin-99"), eq(true))).thenReturn(mockOrder);
 
-        mockMvc.perform(post("/api/v1/orders/ord-100/cancel")
+        mockMvc.perform(delete("/order/ord-100")
                         .with(jwt().jwt(j -> j.subject("admin-99").claim("role", "ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -70,12 +70,12 @@ class OrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - Retorna 403 Forbidden quando usuário não é titular nem admin")
+    @DisplayName("DELETE /order/{id} - Retorna 403 Forbidden quando usuário não é titular nem admin")
     void cancelOrderNonOwnerReturns403() throws Exception {
         when(orderService.cancel(eq("ord-100"), eq("user-intruder"), eq(false)))
                 .thenThrow(new ApiException(HttpStatus.FORBIDDEN, "Acesso negado"));
 
-        mockMvc.perform(post("/api/v1/orders/ord-100/cancel")
+        mockMvc.perform(delete("/order/ord-100")
                         .with(jwt().jwt(j -> j.subject("user-intruder").claim("role", "USER")))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isForbidden())
@@ -83,30 +83,51 @@ class OrderControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - Retorna 400 Bad Request quando pedido já foi despachado (SHIPPED)")
+    @DisplayName("DELETE /order/{id} - Retorna 400 Bad Request quando pedido já foi despachado (SHIPPED)")
     void cancelShippedOrderReturns400() throws Exception {
         when(orderService.cancel(eq("ord-100"), eq("user-1"), eq(false)))
-                .thenThrow(new ApiException(HttpStatus.BAD_REQUEST, "Pedidos enviados não podem ser cancelados"));
+                .thenThrow(new ApiException(HttpStatus.BAD_REQUEST, "Pedidos já enviados ou entregues não podem ser cancelados"));
 
-        mockMvc.perform(post("/api/v1/orders/ord-100/cancel")
+        mockMvc.perform(delete("/order/ord-100")
                         .with(jwt().jwt(j -> j.subject("user-1").claim("role", "USER")))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.message").value("Pedidos enviados não podem ser cancelados"));
+                .andExpect(jsonPath("$.error.message").value("Pedidos já enviados ou entregues não podem ser cancelados"));
     }
 
     @Test
-    @DisplayName("POST /api/v1/orders/{id}/cancel - Retorna 401 Unauthorized sem token JWT")
+    @DisplayName("DELETE /order/{id} - Retorna 404 Not Found quando pedido não existe")
+    void cancelNotFoundOrderReturns404() throws Exception {
+        when(orderService.cancel(eq("ord-999"), eq("user-1"), eq(false)))
+                .thenThrow(new ApiException(HttpStatus.NOT_FOUND, "Pedido não encontrado"));
+
+        mockMvc.perform(delete("/order/ord-999")
+                        .with(jwt().jwt(j -> j.subject("user-1").claim("role", "USER")))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.message").value("Pedido não encontrado"));
+    }
+
+    @Test
+    @DisplayName("DELETE /order/{id} - Retorna 401 Unauthorized sem token JWT")
     void cancelWithoutTokenReturns401() throws Exception {
-        mockMvc.perform(post("/api/v1/orders/ord-100/cancel")
+        mockMvc.perform(delete("/order/ord-100")
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/orders/{id}/items/{itemId} - Endpoint inexistente garante proibição de cancelamento parcial")
+    @DisplayName("POST /order/{id}/cancel - Endpoint anterior desativado/inexistente deve retornar 404 Not Found")
+    void oldPostCancelEndpointMustNotExist() throws Exception {
+        mockMvc.perform(post("/order/ord-100/cancel")
+                        .with(jwt().jwt(j -> j.subject("user-1").claim("role", "USER"))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("DELETE /order/{id}/items/{itemId} - Endpoint inexistente garante proibição de cancelamento parcial")
     void deleteOrderItemEndpointMustNotExist() throws Exception {
-        mockMvc.perform(delete("/api/v1/orders/ord-100/items/item-1")
+        mockMvc.perform(delete("/order/ord-100/items/item-1")
                         .with(jwt().jwt(j -> j.subject("user-1").claim("role", "USER"))))
                 .andExpect(status().isNotFound());
     }

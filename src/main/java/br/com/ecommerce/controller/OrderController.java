@@ -9,7 +9,7 @@ import br.com.ecommerce.service.OrderService;
 import java.util.*;
 
 @RestController
-@RequestMapping("/api/v1/orders")
+@RequestMapping({"/order", "/orders", "/api/v1/orders", "/api/v1/order"})
 public class OrderController {
     private final OrderService service;
 
@@ -28,8 +28,11 @@ public class OrderController {
         return Map.of("data", service.checkout(jwt.getSubject()));
     }
 
-    @PostMapping("/{id}/cancel")
+    @DeleteMapping("/{id}")
     public Object cancel(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
-        throw new UnsupportedOperationException("Não implementado");
+        String userId = jwt.getSubject();
+        String role = jwt.getClaimAsString("role");
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
+        return Map.of("data", service.cancel(id, userId, isAdmin));
     }
 }

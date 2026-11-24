@@ -43,14 +43,14 @@ Disponibilizar os endpoints da API RESTful do e-commerce, atuando como a camada 
 - `POST /items`: Adiciona produto ao carrinho (payload: `productId`, `quantity`).
 - `DELETE /items/{itemId}`: Remove item do carrinho por ID do produto.
 
-### 3.5. `OrderController` (`/api/v1/orders`)
+### 3.5. `OrderController` (`/order`, `/api/v1/orders`)
 - `GET /`: Lista todos os pedidos do usuário autenticado de forma direta (sem filtro).
   > [!NOTE]
   > O administrador não possui rota para filtrar ou listar pedidos de um usuário específico.
 - `POST /`: Checkout com recebimento de dados de entrega (`deliveryAddress`), debitando estoque e gerando pedido em status `PENDING` (`201 Created`).
 - `PATCH /{id}/status`: **Exclusivo `ADMIN`**. Atualiza o status logístico para `PACKING` ou `SHIPPED`.
 - `PATCH /{id}/delivered`: Permite ao próprio usuário titular confirmar o recebimento do pedido, ou ao `ADMIN`.
-- `POST /{id}/cancel`: Cancela o pedido integralmente. Executa estorno de estoque se o status for `PENDING`, `PAID` ou `PACKING`. Rejeita cancelamento com erro `400 Bad Request` se o status for `SHIPPED` ou `DELIVERED`.
+- `DELETE /{id}`: Cancela o pedido integralmente seguindo o padrão RESTful (`DELETE /order/{id}`). Executa estorno atômico de estoque se o status for `PENDING`, `PAID` ou `PACKING`. Rejeita cancelamento com erro `400 Bad Request` se o status for `SHIPPED` ou `DELIVERED`. Retorna `404 Not Found` se o pedido não existir e `403 Forbidden` caso um usuário não-titular tente cancelar sem papel `ADMIN`. *(O endpoint anterior `POST /{id}/cancel` foi desativado).*
 
 ### 3.6. `PaymentController` (`/api/v1/payments`)
 - `POST /`: Cria registro de pagamento para um pedido (`orderId`) informado (`201 Created`).

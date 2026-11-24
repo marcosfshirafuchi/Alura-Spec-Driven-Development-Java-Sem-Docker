@@ -56,8 +56,26 @@ public class OrderService {
         return saved;
     }
 
+    @Transactional
     public PurchaseOrder cancel(String id, String userId, boolean isAdmin) {
-        throw new UnsupportedOperationException("Não implementado");
+        PurchaseOrder order = find(id);
+        if (!isAdmin && !order.user.id.equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "Acesso negado");
+        }
+        order.items.size();
+        if (order.status == OrderStatus.CANCELED) {
+            return order;
+        }
+        if (order.status == OrderStatus.SHIPPED || order.status == OrderStatus.DELIVERED) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "Pedidos já enviados ou entregues não podem ser cancelados");
+        }
+        order.status = OrderStatus.CANCELED;
+        for (OrderItem item : order.items) {
+            Product p = item.product;
+            p.stock += item.quantity;
+            products.save(p);
+        }
+        return orders.save(order);
     }
 
     public PurchaseOrder cancel(String id, String userId) {
